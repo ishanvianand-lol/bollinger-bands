@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 
-st.set_page_config(layout="wide") # Optional: Use wide layout for more horizontal space
+st.set_page_config(layout="wide") 
 
 # Inject custom CSS to reduce top padding
 st.markdown(
@@ -21,24 +21,27 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-col1, col2 = st.columns([1,3])
+col1, col2 = st.columns([2,5])
+
+
+with st.sidebar:
+    stock_symbol = st.text_input("Enter a Stock Symbol").upper()
+    start_date = st.date_input('Start Date')
+    end_date = st.date_input('End Date')
+    initial_capital = st.number_input(
+        'Enter Initial Capital',
+        min_value=0, 
+        value=10000
+    )
+
 
 with col2:
-    tab1, tab2, tab3, tab4 = st.tabs(['Buy/Sell', 'Bollinger Bands', 'RSI', 'MACD'])
-
-    with st.sidebar:
-        stock_symbol = st.text_input("Enter a Stock Symbol").upper()
-        start_date = st.date_input('Start Date')
-        end_date = st.date_input('End Date')
-        initial_capital = st.number_input('Enter Initial Capital',
-        min_value=0, value=10000)
-
-    if (end_date - start_date).days < 20:
+    if (end_date - start_date).days < 30:
         st.warning('Can\'t depict SMAs') 
         st.stop()
 
 
-    # validate input
+    # validating input
     if not stock_symbol or stock_symbol.strip() == "":
         st.warning("Please enter a valid stock symbol.")
         st.stop()
@@ -46,7 +49,7 @@ with col2:
     # when valid
     ticker = yf.Ticker(stock_symbol)
 
-    # --- Fetch Data ---
+    # Fetch Data
     stock_data = ticker.history(
         interval="1d",
         start=start_date,
@@ -68,110 +71,265 @@ with col2:
     stock_data['EMA_12'] = stock_data['Close'].ewm(span=12, adjust=False).mean()
     stock_data['EMA_26'] = stock_data['Close'].ewm(span=26, adjust=False).mean()
 
-    plot_df = stock_data.dropna(subset=['Upper Band'])
+    # Relative Strength Index
+    change_delta = stock_data['Close'].diff()
+    up = change_delta.clip(lower = 0)
+    down = -1*change_delta.clip(upper = 0)
 
-    with tab2:
-        add_plot = [
-            mpf.make_addplot(plot_df["Upper Band"], color="grey"),
-            mpf.make_addplot(plot_df["Lower Band"], color="grey"),
-            mpf.make_addplot(plot_df["SMA20"], color="blue", width=0.5),
-        ]
+    emaUP = up.ewm(com=13, adjust=False).mean()
+    emaDOWN = down.ewm(com=13, adjust=False).mean()
 
-        st.subheader("Bollinger Bands")
+    rs = emaUP / emaDOWN
+    stock_data['RSI'] = 100 - (100 / (1 + rs))
 
-        fig, ax = mpf.plot(
-            plot_df,
-            type="candle",
-            style="yahoo",
-            addplot=add_plot,
-            returnfig=True,
-            figsize=(14, 7)
-        )
-
-        st.pyplot(fig)
-        plt.clf()
-
-
-
-    with tab3:
-        # Relative Strength Index
-        change_delta = plot_df['Close'].diff()
-        up = change_delta.clip(lower = 0)
-        down = -1*change_delta.clip(upper = 0)
-
-        emaUP = up.ewm(com=13, adjust=False).mean()
-        emaDOWN = down.ewm(com=13, adjust=False).mean()
-
-        rs = emaUP / emaDOWN
-        plot_df['RSI'] = 100 - (100 / (1 + rs))
-        
-        st.subheader("Relative Strength Index")
-
-        plt.figure(figsize=(14, 6)) 
-        plt.plot(
-            plot_df["RSI"],
-            color='blue'
-        )
-        plt.axhline(70, color='red', linestyle='--', linewidth=1)
-        plt.axhline(30, color='green', linestyle='--', linewidth=1)
-        plt.title('Relative Strength Index for ' + stock_symbol)
-        plt.ylim(0,100)
-        plt.legend()
-        st.pyplot(plt.gcf())
-        plt.clf()
-
-    with tab4:
-        st.subheader("Moving Average Convergence Divergence")
-
-        # MACD
-        stock_data['MACD Line'] = stock_data['EMA_12'] - stock_data['EMA_26']
-        stock_data['Signal Line'] = stock_data['MACD Line'].ewm(span=9, adjust=False).mean()
-        stock_data['MACD Histogram'] = stock_data['MACD Line'] - stock_data['Signal Line']
-
-        plt.figure(figsize=(14, 7))
-        plt.plot(stock_data['MACD Line'], label='MACD Line', color='blue')
-        plt.plot(stock_data['Signal Line'], label='Signal Line', color='red')
-        plt.bar(stock_data.index, stock_data['MACD Histogram'], label='MACD Histogram', color='grey')
-        plt.title('Moving Average Convergence Divergence for ' + stock_symbol)
-        plt.legend()
-
-        st.pyplot(plt.gcf())
-        plt.clf()
+    # plt.figure(figsize=(14, 6)) 
+    # plt.plot(
+    #     stock_data["RSI"],
+    #     color='blue'
+    # )
+    # plt.axhline(70, color='red', linestyle='--', linewidth=1)
+    # plt.axhline(30, color='green', linestyle='--', linewidth=1)
+    # plt.title('Relative Strength Index for ' + stock_symbol)
+    # plt.ylim(0,100)
+    # plt.legend()
+    # st.pyplot(plt.gcf())
+    # plt.clf()
 
 
-    # selling and buying signals
+    # MACD
+    stock_data['MACD'] = stock_data['EMA_12'] - stock_data['EMA_26']
+    stock_data['Signal Line'] = stock_data['MACD'].ewm(span=9, adjust=False).mean()
+    stock_data['MACD Histogram'] = stock_data['MACD'] - stock_data['Signal Line']
 
-    newPlot = pd.DataFrame(index=stock_data.index)
-    newPlot['Close'] = stock_data["Close"]
-    newPlot['Lower Band'] = stock_data["Lower Band"]
-    newPlot['Upper Band'] = stock_data["Upper Band"]
-    newPlot['RSI'] = plot_df['RSI']
-    newPlot['MACD'] = stock_data['MACD Line']
+    # plt.figure(figsize=(14, 7))
+    # plt.plot(stock_data['MACD'], label='MACD Line', color='blue')
+    # plt.plot(stock_data['Signal Line'], label='Signal Line', color='red')
+    # plt.bar(stock_data.index, stock_data['MACD Histogram'], label='MACD Histogram', color='grey')
+    # plt.title('Moving Average Convergence Divergence for ' + stock_symbol)
+    # plt.legend()
 
-    lower_trend_moved = (
-        (newPlot['Close'].shift(1) >= newPlot['Lower Band'].shift(1)) &
-        (newPlot['Close'] < newPlot['Lower Band'])
+    # st.pyplot(plt.gcf())
+    # plt.clf()
+
+    stock_data = stock_data.dropna(subset=
+                                    ["Upper Band", "Lower Band", "RSI",
+                                    "MACD", "Signal Line"]
+                                ).copy()
+
+    # strong selling and buying signals
+    lower_trend_moved = (stock_data['Close'] < stock_data['Lower Band'])
+    upper_trend_moved = (stock_data['Close'] > stock_data['Upper Band'])
+
+    rsi_condition_buy = stock_data['RSI'] < 35
+    rsi_condition_sell = stock_data['RSI'] > 70
+
+    bullish_macd = (
+        (stock_data['MACD'] > stock_data['Signal Line']) &
+        (stock_data['MACD'].shift(1) <= stock_data['Signal Line'].shift(1))
+    )
+    bearish_macd = (
+        (stock_data['MACD'] < stock_data['Signal Line']) &
+        (stock_data['MACD'].shift(1) >= stock_data['Signal Line'].shift(1))
     )
 
-    upper_trend_moved = (
-        (newPlot['Close'].shift(1) <= newPlot['Upper Band'].shift(1)) &
-        (newPlot['Close'] > newPlot['Upper Band'])
-    )
-
-
-    newPlot['Buy'] = (
+    stock_data['Strong_Buy'] = (
         lower_trend_moved &
-        (newPlot['RSI'] < 30) &
-        (newPlot['MACD'] > 0)
+        (rsi_condition_buy | 
+            bullish_macd)
     ).astype(int)
 
-    newPlot['Sell'] = (
+    stock_data['Strong_Sell'] = (
         upper_trend_moved &
-        (newPlot['RSI'] > 70) &
-        (newPlot['MACD'] < 0)
+        (rsi_condition_sell |
+        bearish_macd)
     ).astype(int)
 
+    # less strict conditions for lesser risk
+    band_width = stock_data['Upper Band'] - stock_data['Lower Band']
+    band_position = (stock_data['Close'] - stock_data['Lower Band']) / band_width
 
+    lower_trend_moved = (band_position <= 0.15)
+    upper_trend_moved = (band_position >= 0.97)
+
+    rsi_condition_buy = stock_data['RSI'] < 40 
+    rsi_condition_sell = stock_data['RSI'] > 60 
+
+    bullish_macd = (stock_data['MACD'] > stock_data['Signal Line'])
+    bearish_macd = (stock_data['MACD'] < stock_data['Signal Line'])
+
+
+    stock_data['Buy'] = (
+        lower_trend_moved | rsi_condition_buy | bullish_macd
+    ).astype(int)
+
+    stock_data['Sell'] = (
+        upper_trend_moved | rsi_condition_sell | bearish_macd
+    ).astype(int)
+
+    custom_style = mpf.make_mpf_style(
+        base_mpf_style='charles',  # Clean base style
+        rc={'font.size': 10},
+        gridcolor='lightgray',
+        facecolor='white',
+        figcolor='white'
+    )
+
+    add_plots = [
+        mpf.make_addplot(stock_data["Upper Band"], color="lightgray"),
+        mpf.make_addplot(stock_data["Lower Band"], color="lightgray"),
+        mpf.make_addplot(stock_data["SMA20"], color="blue", width=0.5),
+        mpf.make_addplot(stock_data['RSI'], panel=1, title='RSI', color = "orange"),
+        mpf.make_addplot(stock_data['MACD'],panel=2, title='MACD', color = "blue"),
+        mpf.make_addplot(stock_data['Signal Line'],panel=2, color = "pink"),
+        mpf.make_addplot(stock_data["MACD Histogram"], type='bar',
+                     panel=2, color='grey', alpha=0.4),
+
+    ]
+
+    buy_points = stock_data[stock_data['Buy'] == 1]
+    if not buy_points.empty:
+        buy_markers = pd.Series(index=stock_data.index, dtype=float)
+        buy_markers.loc[buy_points.index] = stock_data.loc[buy_points.index, "Close"]
+        
+        add_plots.append(
+            mpf.make_addplot(
+                buy_markers,
+                type='scatter',
+                marker="^",
+                color="#74ac68",
+                markersize=20
+            )
+        )
+
+    sell_points = stock_data[stock_data['Sell'] == 1]
+    if not sell_points.empty:
+        sell_marker = pd.Series(index=stock_data.index, dtype=float)
+        sell_marker.loc[sell_points.index] = stock_data.loc[sell_points.index, "Close"]
+        
+        add_plots.append(
+            mpf.make_addplot(
+                sell_marker,
+                type='scatter',
+                marker="v",
+                color="#a44040",
+                markersize=20
+            )
+        )
+
+    fig, ax = mpf.plot(
+        stock_data,
+        type="candle",
+        addplot=add_plots,
+        returnfig=True,
+        figsize=(15, 7),
+        style=custom_style,
+        title=f"{stock_symbol} - Signals",
+        ylabel="Price",
+        panel_ratios=(3, 1, 2)  # taller price panel, smaller RSI/MACD panels
+    )
+
+    st.pyplot(fig)
+    plt.clf()
 
 with col1:
-    st.metric('Portfolio', 10)
+    # Initialize tracking variables
+    cash = initial_capital
+    shares = 0
+    portfolio_values = []
+    trades = []
+
+    # Go through each row
+    for index, row in stock_data.iterrows():
+        date = index
+        price = row['Close']
+        
+        # Check for Strong Buy
+        if row['Strong_Buy'] == 1 and cash > 0:
+            amount_to_invest = cash * 0.6
+            shares_to_buy = amount_to_invest / price
+            cash -= amount_to_invest
+            shares += shares_to_buy
+            trades.append({
+                'Date': date, 
+                'Action': 'Buy',
+                'Price': price,
+                'Shares': shares_to_buy,
+                'Amount': amount_to_invest,
+                'Cash': cash,
+                'Total Shares': shares
+            })
+        
+        # Check for Buy
+        elif row['Buy'] == 1 and cash > 0:
+            amount_to_invest = cash * 0.4
+            shares_to_buy = amount_to_invest / price
+            cash -= amount_to_invest
+            shares += shares_to_buy
+            trades.append({
+                'Date': date, 
+                'Action': 'Buy',
+                'Price': price,
+                'Shares': shares_to_buy,
+                'Amount': amount_to_invest,
+                'Cash': cash,
+                'Total Shares': shares
+            })
+
+        # Check for Strong Sell
+        elif row['Strong_Sell'] == 1 and shares > 0:
+            shares_to_sell = shares * 0.6
+            cash += shares_to_sell * price
+            shares -= shares_to_sell
+            trades.append({
+                'Date': date, 
+                'Action': 'Strong Sell',
+                'Price': price,
+                'Shares': shares_to_sell,
+                'Amount': shares_to_sell * price,
+                'Cash': cash,
+                'Total Shares': shares
+            })
+        
+        # Check for Sell
+        elif row['Sell'] == 1 and shares > 0:
+            shares_to_sell = shares * 0.4
+            cash += shares_to_sell * price
+            shares = shares - shares_to_sell
+            trades.append({
+                'Date': date, 
+                'Action': 'Strong Sell',
+                'Price': price,
+                'Shares': shares_to_sell,
+                'Amount': shares_to_sell * price,
+                'Cash': cash,
+                'Total Shares': shares
+            })
+        
+        # Calculate portfolio value for this day
+        portfolio_value = cash + (shares * price)
+        portfolio_values.append(portfolio_value)
+
+
+    trades_df = pd.DataFrame(trades)
+    portfolio_df = pd.DataFrame()
+    portfolio_df['Portfolio_Value'] = portfolio_values
+    
+    final_value = portfolio_df['Portfolio_Value'].iloc[-1]
+    total_profit = final_value - initial_capital
+    profit_pct = (total_profit / initial_capital) * 100
+    
+    # Display
+    st.subheader("📊 Portfolio Summary")
+    st.metric("Initial Capital", f"${initial_capital:,.2f}")
+    st.metric("Final Value", f"${final_value:,.2f}")
+    st.metric("Profit/Loss", f"${total_profit:,.2f}", f"{profit_pct:.2f}%")
+    
+    st.subheader("💼 Current Holdings")
+    st.write(f"Cash: ${cash:,.2f}")
+    st.write(f"Shares: {shares:.2f}")
+    
+st.subheader("📈 Trade History")
+if not trades_df.empty:
+    st.dataframe(trades_df)
+else:
+    st.write("No trades executed")
