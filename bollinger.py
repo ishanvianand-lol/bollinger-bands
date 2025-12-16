@@ -25,14 +25,10 @@ col1, col2 = st.columns([2,5])
 
 
 with st.sidebar:
-    stock_symbol = st.text_input("Enter a Stock Symbol").upper()
-    start_date = st.date_input('Start Date')
+    stock_symbol = st.text_input("Enter a Stock Symbol", value="NVDA").upper()
+    start_date = st.date_input('Start Date', value='2023-01-01')
     end_date = st.date_input('End Date')
-    initial_capital = st.number_input(
-        'Enter Initial Capital',
-        min_value=0, 
-        value=10000
-    )
+    initial_capital = st.number_input('Enter Initial Capital', min_value=0, value=100)
 
 
 with col2:
