@@ -82,34 +82,13 @@ with col2:
     rs = emaUP / emaDOWN
     stock_data['RSI'] = 100 - (100 / (1 + rs))
 
-    # plt.figure(figsize=(14, 6)) 
-    # plt.plot(
-    #     stock_data["RSI"],
-    #     color='blue'
-    # )
-    # plt.axhline(70, color='red', linestyle='--', linewidth=1)
-    # plt.axhline(30, color='green', linestyle='--', linewidth=1)
-    # plt.title('Relative Strength Index for ' + stock_symbol)
-    # plt.ylim(0,100)
-    # plt.legend()
-    # st.pyplot(plt.gcf())
-    # plt.clf()
-
-
     # MACD
     stock_data['MACD'] = stock_data['EMA_12'] - stock_data['EMA_26']
     stock_data['Signal Line'] = stock_data['MACD'].ewm(span=9, adjust=False).mean()
     stock_data['MACD Histogram'] = stock_data['MACD'] - stock_data['Signal Line']
 
-    # plt.figure(figsize=(14, 7))
-    # plt.plot(stock_data['MACD'], label='MACD Line', color='blue')
-    # plt.plot(stock_data['Signal Line'], label='Signal Line', color='red')
-    # plt.bar(stock_data.index, stock_data['MACD Histogram'], label='MACD Histogram', color='grey')
-    # plt.title('Moving Average Convergence Divergence for ' + stock_symbol)
-    # plt.legend()
-
-    # st.pyplot(plt.gcf())
-    # plt.clf()
+    # MA50 to check the bull/bear/choppy market
+    stock_data['MA50'] = stock_data['Close'].rolling(50).mean() # will use this data whilst buying and selling
 
     stock_data = stock_data.dropna(subset=
                                     ["Upper Band", "Lower Band", "RSI",
@@ -167,8 +146,8 @@ with col2:
     ).astype(int)
 
     custom_style = mpf.make_mpf_style(
-        base_mpf_style='charles',  # Clean base style
-        rc={'font.size': 10},
+        base_mpf_style='binance',  # Clean base style
+        rc={'font.size': 15},
         gridcolor='lightgray',
         facecolor='white',
         figcolor='white'
@@ -177,12 +156,12 @@ with col2:
     add_plots = [
         mpf.make_addplot(stock_data["Upper Band"], color="lightgray"),
         mpf.make_addplot(stock_data["Lower Band"], color="lightgray"),
-        mpf.make_addplot(stock_data["SMA20"], color="blue", width=0.5),
+        mpf.make_addplot(stock_data["SMA20"], color="#FF72E0"),
+        mpf.make_addplot(stock_data['MA50'], color = "#0A57FF"),
         mpf.make_addplot(stock_data['RSI'], panel=1, title='RSI', color = "orange"),
-        mpf.make_addplot(stock_data['MACD'],panel=2, title='MACD', color = "blue"),
-        mpf.make_addplot(stock_data['Signal Line'],panel=2, color = "pink"),
-        mpf.make_addplot(stock_data["MACD Histogram"], type='bar',
-                     panel=2, color='grey', alpha=0.4),
+        mpf.make_addplot(stock_data['MACD'], panel=2, title='MACD', color = "blue"),
+        mpf.make_addplot(stock_data['Signal Line'], panel=2, color = "pink"),
+        mpf.make_addplot(stock_data["MACD Histogram"], type='bar', panel=2, color='grey', alpha=0.35),
 
     ]
 
@@ -197,7 +176,7 @@ with col2:
                 type='scatter',
                 marker="^",
                 color="#74ac68",
-                markersize=20
+                markersize=16
             )
         )
 
@@ -212,7 +191,7 @@ with col2:
                 type='scatter',
                 marker="v",
                 color="#a44040",
-                markersize=20
+                markersize=16
             )
         )
 
@@ -242,10 +221,26 @@ with col1:
     for index, row in stock_data.iterrows():
         date = index
         price = row['Close']
-        
+        ma50 = row['MA50']
+        if price > ma50 * 1.05:  # Price 5% above MA
+            market_regime = "BULL"
+            
+        elif price < ma50 * 0.95:  # Price 5% below MA
+            market_regime = "BEAR"
+            
+        else:
+            market_regime = "NEUTRAL"
+
         # Check for Strong Buy
         if row['Strong_Buy'] == 1 and cash > 0:
-            amount_to_invest = cash * 0.6
+            if market_regime == 'BULL':
+                amount_to_invest = cash * 0.6
+            elif market_regime == 'BEAR': 
+                amount_to_invest = cash * 0.4
+            else:
+                amount_to_invest = cash * 0.5
+
+
             shares_to_buy = amount_to_invest / price
             cash -= amount_to_invest
             shares += shares_to_buy
@@ -261,23 +256,30 @@ with col1:
         
         # Check for Buy
         elif row['Buy'] == 1 and cash > 0:
-            amount_to_invest = cash * 0.4
-            shares_to_buy = amount_to_invest / price
-            cash -= amount_to_invest
-            shares += shares_to_buy
-            trades.append({
-                'Date': date, 
-                'Action': 'Buy',
-                'Price': price,
-                'Shares': shares_to_buy,
-                'Amount': amount_to_invest,
-                'Cash': cash,
-                'Total Shares': shares
-            })
+            if market_regime == 'BULL': 
+                amount_to_invest = cash * 0.5
+                shares_to_buy = amount_to_invest / price
+                cash -= amount_to_invest
+                shares += shares_to_buy
+                trades.append({
+                    'Date': date, 
+                    'Action': 'Buy',
+                    'Price': price,
+                    'Shares': shares_to_buy,
+                    'Amount': amount_to_invest,
+                    'Cash': cash,
+                    'Total Shares': shares
+                })
 
         # Check for Strong Sell
         elif row['Strong_Sell'] == 1 and shares > 0:
-            shares_to_sell = shares * 0.6
+            if market_regime == 'BULL': 
+                shares_to_sell = shares * 0.3
+            elif market_regime == 'BEAR': 
+                shares_to_sell = shares * 0.6
+            else: 
+                shares_to_sell = shares * 0.45
+
             cash += shares_to_sell * price
             shares -= shares_to_sell
             trades.append({
@@ -292,19 +294,20 @@ with col1:
         
         # Check for Sell
         elif row['Sell'] == 1 and shares > 0:
-            shares_to_sell = shares * 0.4
-            cash += shares_to_sell * price
-            shares = shares - shares_to_sell
-            trades.append({
-                'Date': date, 
-                'Action': 'Strong Sell',
-                'Price': price,
-                'Shares': shares_to_sell,
-                'Amount': shares_to_sell * price,
-                'Cash': cash,
-                'Total Shares': shares
-            })
-        
+            if market_regime == 'BEAR': 
+                shares_to_sell = shares * 0.5
+                cash += shares_to_sell * price
+                shares = shares - shares_to_sell
+                trades.append({
+                    'Date': date, 
+                    'Action': 'Strong Sell',
+                    'Price': price,
+                    'Shares': shares_to_sell,
+                    'Amount': shares_to_sell * price,
+                    'Cash': cash,
+                    'Total Shares': shares
+                })
+            
         # Calculate portfolio value for this day
         portfolio_value = cash + (shares * price)
         portfolio_values.append(portfolio_value)
