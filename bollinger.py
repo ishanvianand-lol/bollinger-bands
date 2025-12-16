@@ -21,8 +21,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-col1, col2 = st.columns([2,5])
-
+st.title('PORTFOLIO MANAGEMENT')
+col1, col2 = st.columns([2,5.5])
 
 with st.sidebar:
     stock_symbol = st.text_input("Enter a Stock Symbol", value="NVDA").upper()
@@ -142,7 +142,7 @@ with col2:
     ).astype(int)
 
     custom_style = mpf.make_mpf_style(
-        base_mpf_style='binance',  # Clean base style
+        base_mpf_style='binance', 
         rc={'font.size': 15},
         gridcolor='lightgray',
         facecolor='white',
@@ -196,7 +196,7 @@ with col2:
         type="candle",
         addplot=add_plots,
         returnfig=True,
-        figsize=(15, 7),
+        figsize=(15, 9),
         style=custom_style,
         title=f"{stock_symbol} - Signals",
         ylabel="Price",
