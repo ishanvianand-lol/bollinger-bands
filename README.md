@@ -49,8 +49,7 @@ Based on backtesting results (2019-2024):
 1. Clone the repository:
 
 ```bash
-git clone <your-repo-url>
-cd adaptive-trading-strategy
+git clone https://github.com/ishanvianand-lol/bollinger-bands.git
 ```
 
 2. Install dependencies:
@@ -62,7 +61,7 @@ pip install -r requirements.txt
 3. Run the Streamlit app:
 
 ```bash
-streamlit run app.py
+streamlit run bollinger.py
 ```
 
 ## 💻 Usage
